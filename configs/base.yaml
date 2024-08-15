@@ -1,0 +1,54 @@
+swanlab:
+    use: False
+    project: 'JAXA-${trainer.name}'
+
+seed: 0
+device:
+    type: 'gpu'
+    idx: 0
+logger:
+    log_dir: '/home/zhangzhe/all_logs/jaxa'
+
+env:
+    name: 'halfcheetah-Brax'
+    expl_num: 4
+    eval_num: 5
+    obs_r_norm: False
+    # max_episode_steps: -1 # if >0, will set the max episode length, otherwise follow the default
+
+buffer:
+    max_replay_buffer_size: 1000000
+
+rl_paradigm: 'online' 
+
+rlalg:
+    batch_size: 256
+    start_epoch: 0 # offline epochs if negative 
+    num_epochs: 200
+    num_trains_per_epoch: 5000
+    # epoch_interval_per_eval: 2
+    # num_eval_steps_per_epoch: null
+    num_eval_episodes_per_epoch: 5
+    min_num_steps_before_training: 1e4
+
+save_model: False
+
+trainer: 
+    sac
+
+spec: # specific config for some envs if needed
+    null
+
+hydra:
+    output_subdir: null
+
+defaults:
+    - _self_
+    - trainer: sac
+    - spec: null
+    - override hydra/launcher: joblib
+
+
+
+
+
