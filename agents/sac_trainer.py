@@ -2,12 +2,12 @@ from functools import partial
 from agents.base_trainer import BaseTrainer
 from flax.core.frozen_dict import FrozenDict
 import flax.linen as nn
-# from jax._src.typing import Array, ArrayLike
+import os
 import jax, chex, optax
 import jax.numpy as jnp
 import distrax
-from utils.misc import TrainState, TargetTrainState
-from typing import Union, Dict
+from utils.misc import TrainState, TargetTrainState, SACTrainerState
+from typing import Dict
 from utils.networks import *
 
 class SACTrainer(BaseTrainer):
@@ -16,7 +16,6 @@ class SACTrainer(BaseTrainer):
             self, 
             name: str,
             log_dir: str, 
-            rng: chex.PRNGKey, 
             qf_kwargs: FrozenDict, 
             actor_kwargs: FrozenDict,
             dummy_obs: chex.Array, 
@@ -32,15 +31,17 @@ class SACTrainer(BaseTrainer):
         ) -> None:
         super().__init__(name, log_dir)
 
+        self.dummy_obs = dummy_obs
+        self.dummy_action = dummy_action 
         self.obs_dim = dummy_obs.shape[-1]# FlattenObservationWrapper in default
         self.action_dim = dummy_action.shape[-1]
-        self.auto_fintune_temp = auto_finetune_temp
+        self.auto_finetune_temp = auto_finetune_temp
         self.reward_scaling = reward_scaling
         self.tau = tau
         self.init_temp = init_temp 
         self.discount = discount 
-
-        # build AC network
+        self.opt_kwargs = opt_kwargs
+        # build trainer network
         self.double_critic = nn.vmap(
             MLPQCritic,
             in_axes = None, out_axes = 0,
@@ -49,52 +50,55 @@ class SACTrainer(BaseTrainer):
             axis_size = 2,  # Number of critics
         )(**qf_kwargs)
         self.actor = MLPTanhGaussianActor(self.action_dim, **actor_kwargs)
-        # init AC model
-        critic_rng, actor_rng, temp_rng = jax.random.split(rng, 3)
-        critic_params = self.double_critic.init(critic_rng, dummy_obs, dummy_action) # 'in_axes' is None, so no need to infer 'axis_size' by input size  
-        actor_params = self.actor.init(actor_rng, dummy_obs)
-
         # Temperature(alpha) model if necessary
-        if self.auto_fintune_temp:
+        if self.auto_finetune_temp:
             self.temp = Temperature()
-            temp_params = self.temp.init(temp_rng)
+            # temp_params = self.temp.init(temp_rng)
             if target_entropy is None:
-                self.target_entropy = -self.action_dim
+                self.target_entropy = -0.5 * self.action_dim
             else:
                 self.target_entropy = target_entropy
 
-        # build TrainState 
-        optimizer = self.set_optimizer(**opt_kwargs)
-
-        self.critic_state = TargetTrainState.create(
+    def init_trainer_state(self, rng):
+        critic_rng, actor_rng, temp_rng = jax.random.split(rng, 3)
+        # init AC model state
+        critic_params = self.double_critic.init(critic_rng, self.dummy_obs, self.dummy_action) # 'in_axes' is None, so no need to infer 'axis_size' by input size  
+        actor_params = self.actor.init(actor_rng, self.dummy_obs)
+        critic_state = TargetTrainState.create(
             apply_fn=self.double_critic.apply,
             params=critic_params,
-            target_params=jax.tree_map(lambda x: jnp.copy(x), critic_params),
-            tx=optimizer,
+            target_params=jax.tree_util.tree_map(lambda x: jnp.copy(x), critic_params),
+            tx=self.set_optimizer(**self.opt_kwargs),
             n_updates=0,
         )
-        self.actor_state = TrainState.create(
+        actor_state = TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
-            tx=optimizer
+            tx=self.set_optimizer(**self.opt_kwargs)
         )
-        if self.auto_fintune_temp:
-            self.temp_state = TrainState.create(
+        # init temp model state
+        if self.auto_finetune_temp:
+            temp_params = self.temp.init(temp_rng)
+            temp_state = TrainState.create(
                 apply_fn=self.temp.apply,
                 params=temp_params,
-                tx=optimizer
+                tx=self.set_optimizer(**self.opt_kwargs)
             )
+        else:
+            temp_state = None
+        return SACTrainerState(actor_state=actor_state, critic_state=critic_state, temp_state=temp_state, epoch_idx=0)
 
-    def get_action(self, actor_state, obs, rng, deterministic=False):
+
+    def get_action(self, trainer_state, obs, rng, deterministic=False):
         """
         Return:
             action: jnp.Array with shape: (n, action_dim)
         """
         if not deterministic:
             # self.rng, rng = jax.random.split(self.rng)
-            action = self.random_action(actor_state, obs, rng)
+            action = self.random_action(trainer_state.actor_state, obs, rng)
         else: 
-            action = self.optimal_action(actor_state, obs)
+            action = self.optimal_action(trainer_state.actor_state, obs)
         return action
 
     @partial(jax.jit, static_argnames=['self'])
@@ -119,26 +123,24 @@ class SACTrainer(BaseTrainer):
         return action
 
     @partial(jax.jit, static_argnames=['self'])
-    def update(self, agent_state, batch_data, rng):
+    def update(self, trainer_state, batch_data, rng):
         """ implement an update of AC model once """
         """
         Args:
             batch_data: flashbax.sample.experience
         """
         rng_c, rng_a = jax.random.split(rng, 2)
-        if self.auto_fintune_temp:
-            critic_state, actor_state, temp_state = agent_state 
-            alpha = self.temp_state.apply_fn(temp_state.params)
+        if self.auto_finetune_temp:
+            alpha = trainer_state.temp_state.apply_fn(trainer_state.temp_state.params)
         else:
-            critic_state, actor_state = agent_state
             alpha = self.init_temp
 
-        new_critic_state, critic_loss = self.update_critic(
-            critic_state, actor_state, alpha, batch_data, rng_c
+        critic_state, critic_loss = self.update_critic(
+            trainer_state.critic_state, trainer_state.actor_state, alpha, batch_data, rng_c
         )        
-        new_actor_state, entropy, actor_loss = self.update_actor(
-            critic_state,
-            actor_state, 
+        actor_state, entropy, actor_loss = self.update_actor(
+            trainer_state.critic_state,
+            trainer_state.actor_state, 
             alpha,
             batch_data,
             rng_a,
@@ -147,14 +149,12 @@ class SACTrainer(BaseTrainer):
             'tr/q_loss': critic_loss, 
             'tr/pi_loss': actor_loss
         }
-        new_agent_state = (new_critic_state, new_actor_state)
-        if self.auto_fintune_temp:
-            new_temp_state, temp_loss = self.update_temp(temp_state, entropy)
+        temp_state = None
+        if self.auto_finetune_temp:
+            temp_state, temp_loss = self.update_temp(trainer_state.temp_state, entropy)
             total_infos['tr/alpha_loss'] = temp_loss
-            new_agent_state = (new_critic_state, new_actor_state, new_temp_state)
 
-        # TODO: log loss and other variables
-        return new_agent_state, total_infos
+        return SACTrainerState(actor_state=actor_state, critic_state=critic_state, temp_state=temp_state, epoch_idx=trainer_state.epoch_idx), total_infos
 
     def update_critic(self, critic_state, actor_state, alpha, batch_data, rng):
         next_obs = batch_data.second.obs # (bs, dim)
@@ -216,36 +216,28 @@ class SACTrainer(BaseTrainer):
         return action, log_prob 
     
     @property
-    def model_params(self):
-        params = { 
-            'critic': self.critic_state.params,
-            'actor': self.actor_state.params,
-        } 
-        if self.auto_fintune_temp:
-            params['temp'] = self.temp_state.params
-        return params 
-
-    @property
-    def agent_state(self):
-        if self.auto_fintune_temp:
-            state = (self.critic_state, self.actor_state, self.temp_state)
-        else:
-            state = (self.critic_state, self.actor_state)
-        return state
-    
-    def update_agent_state(self, agent_state):
-        if self.auto_fintune_temp:
-            self.critic_state, self.actor_state, self.temp_state = agent_state
-        else:
-            self.critic_state, self.actor_state = agent_state
-
-    @property
     def null_total_infos(self):
         """ should match with the format of 'total_info' in func 'update()' """
         infos = {
             'tr/q_loss': jnp.array(0.0),
             'tr/pi_loss': jnp.array(0.0),
         }
-        if self.auto_fintune_temp:
+        if self.auto_finetune_temp:
             infos['tr/alpha_loss'] = jnp.array(0.0)
         return infos
+
+    def save_trainer_state(self, trainer_state_outs, outs_size):
+        all_actor_params = trainer_state_outs.actor_state.params
+        all_critic_params = trainer_state_outs.critic_state.params
+        if self.auto_finetune_temp:
+            all_temp_params = trainer_state_outs.temp_state.params
+        
+        for i in range(outs_size):
+            model_params_dict = {
+                'actor_params': jax.tree_util.tree_map(lambda x: x[i], all_actor_params),
+                'critic_params': jax.tree_util.tree_map(lambda x: x[i], all_critic_params)
+            }
+            if self.auto_finetune_temp:
+                model_params_dict['temp_params'] = jax.tree_util.tree_map(lambda x: x[i], all_temp_params)
+            save_dir = os.path.join(self.log_dir, f'final_model_vmap_{i}')
+            self.save_model(model_params_dict, save_dir)

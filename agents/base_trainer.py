@@ -1,10 +1,7 @@
 from utils.logger import Logger 
 import abc
-from typing import Union, Callable, Any, Dict
-import jax, optax, chex
-from flax.core.frozen_dict import FrozenDict 
-# from jax._src.typing import Array, ArrayLike
-from omegaconf import DictConfig, ListConfig
+from typing import Union, Any, Dict
+import optax, chex
 import orbax.checkpoint
 from flax.training import orbax_utils
 
@@ -14,11 +11,10 @@ class BaseTrainer(object, metaclass=abc.ABCMeta):
             self, 
             name: str, 
             log_dir: str, 
-            # rng: chex.PRNGKey
         ):
         self.name = name
+        self.log_dir = log_dir
         self.logger = Logger(log_dir)
-        # self.rng = rng
 
     def set_optimizer(
             self,
@@ -48,22 +44,19 @@ class BaseTrainer(object, metaclass=abc.ABCMeta):
             optimizer = getattr(optax, opt_name.lower())(**lr_kwargs)
         return optimizer
 
+    @abc.abstractmethod
+    def init_trainer_state(self, rng):
+        pass
 
     @abc.abstractmethod
     def update(self):
         pass
 
-
     @abc.abstractmethod
-    def get_action(self, actor_state: Any, obs: chex.Array, deterministic=False):
+    def get_action(self):
         pass
     
-    @property
-    def model_params(self,):
-        """ a Dict includes all model parameters"""
-        raise NotImplementedError
-
-    def save_model(self, save_dir):
+    def save_model(self, model_params_dict, save_dir):
         orbax_ckpt = orbax.checkpoint.PyTreeCheckpointer()
-        save_args = orbax_utils.save_args_from_target(self.model_params)
-        orbax_ckpt.save(save_dir, self.model_params, save_args=save_args)
+        save_args = orbax_utils.save_args_from_target(model_params_dict)
+        orbax_ckpt.save(save_dir, model_params_dict, save_args=save_args)

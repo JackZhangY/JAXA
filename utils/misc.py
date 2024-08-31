@@ -57,5 +57,20 @@ class Transition:
     reward: chex.Array
     done: chex.Array
 
+@chex.dataclass
+class CriticTrainerState:
+    critic_state: TrainState
+    epoch_idx: int
+
+@chex.dataclass
+class ACTrainerState:
+    actor_state: TrainState
+    critic_state: TrainState
+    epoch_idx: int
+
+@chex.dataclass
+class SACTrainerState(ACTrainerState):
+    temp_state: TrainState | None
+
 def d4rl_to_fbx(env_name, buffer_state, buffer):
     return buffer_state 

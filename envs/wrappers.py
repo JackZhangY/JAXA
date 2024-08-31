@@ -4,11 +4,12 @@ import chex
 import numpy as np
 from flax import struct
 from functools import partial
-from typing import Optional, Tuple, Union, Any
+from typing import Optional, Tuple, Union, Any, Dict
 from gymnax.environments import environment, spaces
 from brax import envs
 from brax.envs.wrappers.training import EpisodeWrapper, AutoResetWrapper
 import navix as nx
+import envpool
 
 
 class GymnaxWrapper(object):
@@ -62,7 +63,7 @@ class FlattenObservationWrapper(GymnaxWrapper):
 
 @struct.dataclass
 class LogEnvState:
-    env_state: environment.EnvState
+    env_state: environment.EnvState | Tuple[Any, Dict] 
     episode_returns: float
     episode_lengths: int
     returned_episode_returns: float
@@ -115,7 +116,7 @@ class LogWrapper(GymnaxWrapper):
 
 
 class BraxGymnaxWrapper:
-    def __init__(self, env_name, backend="positional"):
+    def __init__(self, env_name, backend="spring"):
         env = envs.get_environment(env_name=env_name, backend=backend)
         env = EpisodeWrapper(env, episode_length=1000, action_repeat=1)
         env = AutoResetWrapper(env)
@@ -144,6 +145,40 @@ class BraxGymnaxWrapper:
             high=1.0,
             shape=(self._env.action_size,),
         )
+
+# @struct.dataclass
+# class EnvPoolState:
+#     handle: chex.Array
+#     info: Dict
+
+# class EnvpoolGymnaxWrapper:
+#     def __init__(self, env_name, env_nums=1, seed=0):
+#         # env = envpool.make_gymnasium(env_name, num_envs=env_nums, seed=seed)
+#         self.env_name = env_name
+#         self.env_nums = env_nums
+
+#     def reset(self, key, params=None):
+#         def init_env_callback(key):
+#             seed = int(jax.random.randint(key[0], (), minval=0, maxval=100))
+#             env = envpool.make_gymnasium(self.env_name, num_envs=self.env_nums, seed=seed)
+#             return env
+#         self._env = jax.pure_callback(init_env_callback, jax.ShapeDtypeStruct(), key)
+#         handle, self.recv, self.send, self.env_step = self._env.xla()
+#         obs, info_dict = self._env.reset()
+#         state = EnvPoolState(handle=handle, info=info_dict)
+#         return obs, state 
+
+#     def step(self, key, state, action, params=None):
+#         handle, (obs, reward, done, trunc, info_dict) = self.env_step(state.handle, action)
+#         done = (done | trunc)
+#         return obs, EnvPoolState(handle=handle, info=info_dict), reward, done, {} 
+
+#     def observation_space(self, params):
+#         return self._env.observation_space
+
+#     def action_space(self, params):
+#         return self._env.action_space
+
 
 class NavixGymnaxWrapper:
     def __init__(self, env_name):
@@ -290,6 +325,46 @@ class NormalizeVecObservation(GymnaxWrapper):
             done,
             info,
         )
+
+class EvalNormalizeVecObservation(GymnaxWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+
+    def reset(
+            self, 
+            key, 
+            params, 
+            mean_var_stats: Tuple[jnp.ndarray, jnp.ndarray] 
+        ):
+        """
+        statistic: [mean_array, var_array] 
+        """
+        obs, state = self._env.reset(key, params)
+        state = NormalizeVecObsEnvState(
+            mean=mean_var_stats[0],
+            var=mean_var_stats[1],
+            count=0,
+            env_state=state
+        )
+        return (obs - state.mean) / jnp.sqrt(state.var + 1e-8), state
+
+    def step(self, key, state, action, params=None):
+        obs, env_state, reward, done, info = self._env.step(
+            key, state.env_state, action, params
+        )
+        state = NormalizeVecObsEnvState(
+            mean=state.mean,
+            var=state.var,
+            count=state.count,
+            env_state=env_state,
+        )
+        return (
+                (obs - state.mean) / jnp.sqrt(state.var + 1e-8),
+                state,
+                reward,
+                done,
+                info,
+            )
 
 
 @struct.dataclass

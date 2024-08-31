@@ -1,19 +1,18 @@
-swanlab:
-    use: False
-    project: 'JAXA-${trainer.name}'
+project: 'JAXA-${trainer.name}-SS'
 
 seed: 0
-device:
-    type: 'gpu'
-    idx: 0
+num_seeds: 6 
+
+wandb_mode: True
 logger:
     log_dir: '/home/zhangzhe/all_logs/jaxa'
 
 env:
     name: 'halfcheetah-Brax'
-    expl_num: 4
+    backend: 'generalized'
+    expl_num: 100
     eval_num: 5
-    obs_r_norm: False
+    obs_norm: True 
     # max_episode_steps: -1 # if >0, will set the max episode length, otherwise follow the default
 
 buffer:
@@ -22,14 +21,18 @@ buffer:
 rl_paradigm: 'online' 
 
 rlalg:
-    batch_size: 256
+    batch_size: 512
     start_epoch: 0 # offline epochs if negative 
-    num_epochs: 200
-    num_trains_per_epoch: 5000
-    # epoch_interval_per_eval: 2
-    # num_eval_steps_per_epoch: null
+    end_epoch: 100
+    total_steps: 1000000
     num_eval_episodes_per_epoch: 5
+    # online RL HP
+    num_timesteps_per_epoch: 10000
+    vec_env_rollout_len: 1 
+    num_trains_per_expl_step: null
     min_num_steps_before_training: 1e4
+    # offline RL HP
+
 
 save_model: False
 
