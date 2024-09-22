@@ -8,12 +8,12 @@ logger:
     log_dir: '/home/zhangzhe/all_logs/jaxa'
 
 env:
-    name: 'halfcheetah-Brax'
-    backend: 'generalized'
+    name: 'halfcheetah-random-v2' # 'halfcheetah-Brax' / 'halfcheetah-random-v2'
+    backend: null # 'if Brax: generalized/positional/spring'
     expl_num: 100
     eval_num: 5
     obs_norm: True 
-    # max_episode_steps: -1 # if >0, will set the max episode length, otherwise follow the default
+    max_episode_steps: -1 # if >0, will set the max episode length, otherwise follow the default
 
 buffer:
     max_replay_buffer_size: 1000000

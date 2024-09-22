@@ -1,6 +1,5 @@
 import abc
 from utils.misc import Transition
-from flashbax.buffers.trajectory_buffer import TrajectoryBuffer
 from typing import Tuple, Any
 from agents.base_trainer import BaseTrainer
 

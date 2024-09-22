@@ -1,0 +1,49 @@
+project: 'JAXA-Offline-D4RL'
+
+seed: 0
+# num_seeds: 1 
+
+wandb_mode: False
+logger:
+    log_dir: '/home/zhangzhe/all_logs/jaxa'
+
+env:
+    name: 'hopper-random-v2' # 'halfcheetah-random-v2'
+    obs_norm: False 
+    reward_norm: True
+    max_episode_steps: -1 # if >0, will set the max episode length, otherwise follow the default
+    num_eval_envs: 5
+
+buffer:
+    max_replay_buffer_size: null # if not None, used for online finetune
+
+rlalg:
+    batch_size: 512
+    start_epoch: -500 # offline epochs if negative 
+    end_epoch: 0
+    total_steps: 1000000
+    num_eval_episodes_per_epoch: 5
+    num_training_steps_per_epoch: 2000
+
+save_model: False
+
+trainer: 
+    iql
+    
+
+spec: # specific config for some envs if needed
+    null
+
+hydra:
+    output_subdir: null
+
+defaults:
+    - _self_
+    - trainer: iql 
+    - spec: null
+    - override hydra/launcher: joblib
+
+
+
+
+

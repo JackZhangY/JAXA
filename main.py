@@ -10,10 +10,16 @@ import wandb
 from envs.wrappers import  NormalizeVecObservation, EvalNormalizeVecObservation
 from envs.make_env import make_vec_env
 import flashbax as fbx
-from utils.misc import d4rl_to_fbx, omegaconf_to_dict
+from utils.misc import omegaconf_to_dict
+# from replay_buffers.buffer_utils import d4rl_to_fbx
 from agents import * 
 from core import *
 
+#####################################################
+#######                                       #######
+#######   Online RL Algorithm Implementation  #######
+#######                                       #######
+#####################################################
 @hydra.main(config_path='configs', config_name='base.yaml')
 def main(args):
     ### seed and device ###
@@ -29,41 +35,25 @@ def main(args):
         return None
 
     #### build Env & Replaybuffer ####
-    if args.rl_paradigm == 'online':
-        rng, rng_eval, rng_expl = jax.random.split(rng, 3)
-        eval_env, eval_env_params, fake_trans = make_vec_env(args.env, rng_eval)
-        expl_env, expl_env_params, _ = make_vec_env(args.env, rng_expl)
-        if args.env.obs_norm:
-            eval_env, expl_env = EvalNormalizeVecObservation(eval_env), NormalizeVecObservation(expl_env)
-        # build ReplayBuffer
-        buffer = fbx.make_flat_buffer(
-            max_length=args.buffer.max_replay_buffer_size,
-            min_length=args.rlalg.batch_size,
-            sample_batch_size=args.rlalg.batch_size,
-            add_sequences=False,
-            add_batch_size=args.env.expl_num
-        )
-        buffer = buffer.replace(
-            init=jax.jit(buffer.init),
-            add=jax.jit(buffer.add, donate_argnums=0),
-            sample=jax.jit(buffer.sample),
-            can_sample=jax.jit(buffer.can_sample)
-        )
-    else: # offline rl # TODO: other RL paradigm, e.g., Meta RL, Offline Meta RL?
-        # TODO: init D4RL env:
-        # build ReplayBuffer
-        buffer = fbx.make_flat_buffer(
-            max_length=args.buffer.max_replay_buffer_size,
-            min_length=args.rlalg.batch_size,
-            sample_batch_size=args.rlalg.batch_size
-        )
-        buffer = buffer.replace(
-            init=jax.jit(buffer.init),
-            add=jax.jit(buffer.add, donate_argnums=0),
-            sample=jax.jit(buffer.sample),
-            can_sample=jax.jit(buffer.can_sample)
-        )
-        buffer_state = d4rl_to_fbx(env_name=args.env.name, buffer_state=buffer_state, buffer=buffer)    
+    rng, rng_eval, rng_expl = jax.random.split(rng, 3)
+    eval_env, eval_env_params, fake_trans = make_vec_env(args.env, rng_eval)
+    expl_env, expl_env_params, _ = make_vec_env(args.env, rng_expl)
+    if args.env.obs_norm:
+        eval_env, expl_env = EvalNormalizeVecObservation(eval_env), NormalizeVecObservation(expl_env)
+    # build ReplayBuffer
+    buffer = fbx.make_flat_buffer(
+        max_length=args.buffer.max_replay_buffer_size,
+        min_length=args.rlalg.batch_size,
+        sample_batch_size=args.rlalg.batch_size,
+        add_sequences=False,
+        add_batch_size=args.env.expl_num
+    )
+    buffer = buffer.replace(
+        init=jax.jit(buffer.init),
+        add=jax.jit(buffer.add, donate_argnums=0),
+        sample=jax.jit(buffer.sample),
+        can_sample=jax.jit(buffer.can_sample)
+    )
 
     ### build Trainer & RL algro ###
     if args.trainer.name  == 'SAC':
@@ -77,19 +67,16 @@ def main(args):
         raise NotImplementedError('Not support current algorithm')
 
     # build RL algorithm
-    if args.rl_paradigm == 'online':
-        RLAlgo = OnlineRLParadigm(
-            args=args,
-            trainer=trainer,
-            exploration_env=(expl_env, expl_env_params),
-            evaluation_env=(eval_env, eval_env_params),
-            expl_env_nums=args.env.expl_num,
-            eval_env_nums=args.env.eval_num,
-            replay_buffer=(buffer, fake_trans),
-            **args.rlalg,
-        )
-    else:
-        raise NotImplementedError('Not suppoert current RL setting')
+    RLAlgo = OnlineRLParadigm(
+        args=args,
+        trainer=trainer,
+        exploration_env=(expl_env, expl_env_params),
+        evaluation_env=(eval_env, eval_env_params),
+        expl_env_nums=args.env.expl_num,
+        eval_env_nums=args.env.eval_num,
+        replay_buffer=(buffer, fake_trans),
+        **args.rlalg,
+    )
 
     # save config   
     trainer.logger.log_variant(os.path.join(exp_dir, 'configs.json'), omegaconf_to_dict(args))

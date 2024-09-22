@@ -1,14 +1,19 @@
 from envs.wrappers import (BraxGymnaxWrapper, FlattenObservationWrapper, LogWrapper, VecEnv, ClipAction)
-import gymnax, envpool
+from envs.d4rl_env import NormalizedBoxEnv
+from envs.mp_vec_env import SubprocVecEnv
+import gym
+import d4rl
 import jax
-from typing import Any
+from typing import Any, Callable, Tuple, Union
 from utils.misc import Transition
 import chex
+from omegaconf import DictConfig
 
 
 def make_vec_env(env_args: Any, rng: chex.PRNGKey):
     env_type = env_args.name.split('-')[-1]
     if env_type == 'MinAtar':
+        import gymnax
         env, env_params = gymnax.make(env_args.name)
         env = FlattenObservationWrapper(env)
         env = LogWrapper(env)
@@ -40,3 +45,47 @@ def make_vec_env(env_args: Any, rng: chex.PRNGKey):
 
     return env, env_params, _trans
 
+def make_d4rl_vec_env(
+    env_args: DictConfig,
+    obs_stats: Tuple,
+    seed: int = 0,
+    start_method: Union[str, None] = None 
+) -> VecEnv:
+    """
+    Create a wrapped, monitored ``VecEnv``.
+    By default it uses a ``DummyVecEnv`` which is usually faster
+    than a ``SubprocVecEnv``.
+
+    :param env_args: includes the env ID, optional obs normalization, optional max episode length
+    :param n_envs: the number of environments you wish to have in parallel
+    :param seed: the initial seed for the random number generator
+    :return: The wrapped environment
+    """
+
+    def make_env(rank: int) -> Callable[[], gym.Env]:
+        def _init() -> gym.Env:
+
+            if isinstance(env_args.name, str):
+                env = gym.make(env_args.name)
+                if env_args.obs_norm:
+                    env = NormalizedBoxEnv(env)
+                    env.set_obs_stats(obs_mean=obs_stats[0], obs_std=obs_stats[1])
+                if env_args.max_episode_steps > 0:
+                    env._max_episode_steps = env_args.max_episode_steps
+            else:
+                raise ValueError('Please input str type of env_id')
+
+            if seed is not None:
+                # Note: here we only seed the action space
+                # We will seed the env at the next reset
+                env.seed(seed + rank)
+                env.action_space.seed(seed + rank)
+                env.observation_space.seed(seed + rank)
+            return env
+
+        return _init
+
+    vec_env = SubprocVecEnv([make_env(i) for i in range(env_args.num_eval_envs)], start_method=start_method)
+    # Prepare the seeds for the first reset
+    vec_env.seed(seed)
+    return vec_env

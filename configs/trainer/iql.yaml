@@ -1,0 +1,46 @@
+
+# @package _global_
+
+trainer:
+    name: 'IQL'
+    qf_kwargs: {
+        hidden_cfg: {hidden_dims: [256, 256], hidden_act: 'ReLU',}
+    }
+    vf_kwargs: {
+        hidden_cfg: {hidden_dims: [256, 256], hidden_act: 'ReLU',}
+    } 
+    actor_kwargs: {
+        hidden_cfg: {hidden_dims: [256, 256], hidden_act: 'ReLU', dropout_rate: 0.},
+        log_std_min: -5.0
+    }
+    critic_opt_kwargs: {
+        opt_name: 'adam',
+        grad_clip: -1., 
+        max_grad_norm: -1.,
+        anneal: null,
+        lr_kwargs: {
+            learning_rate: 3e-4
+        }
+    }
+    actor_opt_kwargs: {
+        opt_name: 'adam', 
+        grad_clip: -1., 
+        max_grad_norm: -1.,
+        anneal: {name: 'cosine_decay_schedule', init_value: 3e-4, decay_steps: 1000000}, # if 'anneal' is not None, set it as the arguments ({'name':xx, 'arg1':xx, ...}) to build a 'Schedule'
+        lr_kwargs: {
+            learning_rate: null # if 'anneal' is not None, 'learning_rate' should be assigned as a 'Schedule' 
+        }
+    }
+    reward_scaling: 1.
+    reward_bias: 0.
+    tau: 0.005
+    discount: 0.99
+    clip_score: 100.
+    quantile: 0.7
+    beta: 3.0
+
+    exp_prefix: "obs_norm=${env.obs_norm}\
+    _r_norm=${env.reward_norm}\
+    _quantile=${trainer.quantile}\
+    _beta=${trainer.beta}\
+    _seed=${seed}"

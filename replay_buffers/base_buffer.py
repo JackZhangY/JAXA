@@ -1,4 +1,6 @@
 import abc
+import chex
+from typing import Any
 
 class BaseBuffer(object, metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -17,7 +19,7 @@ class BaseBuffer(object, metaclass=abc.ABCMeta):
         pass
     
     @abc.abstractmethod
-    def get_random_batch(self, batch_size: int):
+    def sample(self, buffer_state: Any, rng: chex.PRNGKey):
         pass
 
 

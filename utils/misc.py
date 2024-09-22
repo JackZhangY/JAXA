@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 from enum import Enum
 import chex, os, errno, json
 from flax.core import FrozenDict
@@ -48,7 +48,21 @@ class MyEncoder(json.JSONEncoder):
 ##### misc definitions for RL training #####
 class TargetTrainState(TrainState):
     target_params: FrozenDict
-    n_updates: int
+    n_updates: Union[int, chex.Array]
+
+
+@chex.dataclass
+class OfflineTrans:
+    obs: chex.Array
+    actions: chex.Array
+    rewards: chex.Array
+    next_obs: chex.Array
+    dones: chex.Array
+
+@chex.dataclass
+class D4RLBufferState:
+    data: OfflineTrans
+    buffer_size: chex.Array
 
 @chex.dataclass(frozen=True)
 class Transition:
@@ -60,17 +74,18 @@ class Transition:
 @chex.dataclass
 class CriticTrainerState:
     critic_state: TrainState
-    epoch_idx: int
+    epoch_idx: Union[int, chex.Array]
 
 @chex.dataclass
 class ACTrainerState:
     actor_state: TrainState
-    critic_state: TrainState
-    epoch_idx: int
+    q_critic_state: TrainState
+    epoch_idx: Union[int, chex.Array]
 
 @chex.dataclass
 class SACTrainerState(ACTrainerState):
-    temp_state: TrainState | None
+    temp_state: Union[TrainState, None]
 
-def d4rl_to_fbx(env_name, buffer_state, buffer):
-    return buffer_state 
+@chex.dataclass
+class IQLTrainerState(ACTrainerState):
+    v_critic_state: TrainState

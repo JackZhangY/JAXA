@@ -7,9 +7,7 @@ from functools import partial
 from typing import Optional, Tuple, Union, Any, Dict
 from gymnax.environments import environment, spaces
 from brax import envs
-from brax.envs.wrappers.training import EpisodeWrapper, AutoResetWrapper
-import navix as nx
-import envpool
+from brax.envs.wrappers import EpisodeWrapper, AutoResetWrapper
 
 
 class GymnaxWrapper(object):
@@ -63,7 +61,7 @@ class FlattenObservationWrapper(GymnaxWrapper):
 
 @struct.dataclass
 class LogEnvState:
-    env_state: environment.EnvState | Tuple[Any, Dict] 
+    env_state: Union[environment.EnvState, Tuple[Any, Dict]] 
     episode_returns: float
     episode_lengths: int
     returned_episode_returns: float

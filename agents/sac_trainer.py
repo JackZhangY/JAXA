@@ -7,7 +7,7 @@ import jax, chex, optax
 import jax.numpy as jnp
 import distrax
 from utils.misc import TrainState, TargetTrainState, SACTrainerState
-from typing import Dict
+from typing import Dict, Union
 from utils.networks import *
 
 class SACTrainer(BaseTrainer):
@@ -23,8 +23,9 @@ class SACTrainer(BaseTrainer):
             opt_kwargs: Dict,
             auto_finetune_temp: bool = True,
             reward_scaling: float = 1.0,
+            reward_bias: float = 0.0,
             init_temp: float = 0.,
-            target_entropy: float | None = None,
+            target_entropy: Union[float, None] = None,
             tau: float = 0.01,
             discount: float = 0.99,
             exp_prefix: str = ''
@@ -37,6 +38,7 @@ class SACTrainer(BaseTrainer):
         self.action_dim = dummy_action.shape[-1]
         self.auto_finetune_temp = auto_finetune_temp
         self.reward_scaling = reward_scaling
+        self.reward_bias = reward_bias
         self.tau = tau
         self.init_temp = init_temp 
         self.discount = discount 
@@ -86,8 +88,7 @@ class SACTrainer(BaseTrainer):
             )
         else:
             temp_state = None
-        return SACTrainerState(actor_state=actor_state, critic_state=critic_state, temp_state=temp_state, epoch_idx=0)
-
+        return SACTrainerState(actor_state=actor_state, q_critic_state=critic_state, temp_state=temp_state, epoch_idx=0)
 
     def get_action(self, trainer_state, obs, rng, deterministic=False):
         """
@@ -136,10 +137,10 @@ class SACTrainer(BaseTrainer):
             alpha = self.init_temp
 
         critic_state, critic_loss = self.update_critic(
-            trainer_state.critic_state, trainer_state.actor_state, alpha, batch_data, rng_c
+            trainer_state.q_critic_state, trainer_state.actor_state, alpha, batch_data, rng_c
         )        
         actor_state, entropy, actor_loss = self.update_actor(
-            trainer_state.critic_state,
+            trainer_state.q_critic_state,
             trainer_state.actor_state, 
             alpha,
             batch_data,
@@ -154,7 +155,7 @@ class SACTrainer(BaseTrainer):
             temp_state, temp_loss = self.update_temp(trainer_state.temp_state, entropy)
             total_infos['tr/alpha_loss'] = temp_loss
 
-        return SACTrainerState(actor_state=actor_state, critic_state=critic_state, temp_state=temp_state, epoch_idx=trainer_state.epoch_idx), total_infos
+        return SACTrainerState(actor_state=actor_state, q_critic_state=critic_state, temp_state=temp_state, epoch_idx=trainer_state.epoch_idx), total_infos
 
     def update_critic(self, critic_state, actor_state, alpha, batch_data, rng):
         next_obs = batch_data.second.obs # (bs, dim)
@@ -162,9 +163,10 @@ class SACTrainer(BaseTrainer):
         next_action, next_log_prob = self.sample_and_log_prob(
             actor_state, actor_state.params, next_obs, rng
         ) # shape: (bs, act_dim), (bs,)
+        next_obs_action = jnp.concatenate([next_obs, next_action], axis=-1)
         q_next = critic_state.apply_fn(critic_state.target_params, next_obs, next_action)  # shape: (2, bs, 1)
         min_q_next = jnp.min(q_next, axis=0) # (bs, 1)
-        q_target = jax.lax.stop_gradient(rewards * self.reward_scaling + self.discount * (1. - batch_data.first.done) \
+        q_target = jax.lax.stop_gradient(self.reward_scaling * rewards + self.reward_bias + self.discount * (1. - batch_data.first.done) \
             * (min_q_next.squeeze() - alpha * next_log_prob)) # (bs,)
         def q_loss_fun(params):
             qs = critic_state.apply_fn(params, batch_data.first.obs, batch_data.first.action) #(2, bs, 1)
@@ -217,7 +219,7 @@ class SACTrainer(BaseTrainer):
     
     @property
     def null_total_infos(self):
-        """ should match with the format of 'total_info' in func 'update()' """
+        """ should match with the format of 'total_infos' in func 'update()' """
         infos = {
             'tr/q_loss': jnp.array(0.0),
             'tr/pi_loss': jnp.array(0.0),
@@ -228,7 +230,7 @@ class SACTrainer(BaseTrainer):
 
     def save_trainer_state(self, trainer_state_outs, outs_size):
         all_actor_params = trainer_state_outs.actor_state.params
-        all_critic_params = trainer_state_outs.critic_state.params
+        all_critic_params = trainer_state_outs.q_critic_state.params
         if self.auto_finetune_temp:
             all_temp_params = trainer_state_outs.temp_state.params
         

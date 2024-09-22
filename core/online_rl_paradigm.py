@@ -1,8 +1,8 @@
 from core.rl_paradigm import BaseParadigm
 from agents.base_trainer import BaseTrainer
-import swanlab, wandb
+import wandb
 from flashbax.buffers.trajectory_buffer import TrajectoryBuffer
-from typing import Tuple, Any
+from typing import Tuple, Any, Union
 import jax
 import jax.numpy as jnp
 from utils.misc import Transition
@@ -25,8 +25,8 @@ class OnlineRLParadigm(BaseParadigm):
             total_steps: int = 1000000,
             num_timesteps_per_epoch: int = 1000,
             vec_env_rollout_len: int = 1,
-            num_trains_per_expl_step: int | None = None,
-            num_eval_episodes_per_epoch: int | None = 5,
+            num_trains_per_expl_step: Union[int, None] = None,
+            num_eval_episodes_per_epoch: Union[int, None] = 5,
             min_num_steps_before_training=10000,
         ):
         super().__init__(

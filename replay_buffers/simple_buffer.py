@@ -39,7 +39,7 @@ class SimpleBuffer(BaseBuffer):
         self.size += 1
         self.size = min(self.size, self.max_buffer_size)
 
-    def get_random_batch(self, batch_size: int):
+    def sample(self, batch_size: int):
         idx = np.random.choice(self.size, size=batch_size, replace=self.replacement or self.size < batch_size)
         if not self.replacement and self.size < batch_size:
             warnings.warn('Replace was set to false, but is temporarily set to true because batch size is larger than current size of replay.')
