@@ -89,7 +89,27 @@ class MLPQNet(nn.Module):
         return q 
 
 class ConvQNet(nn.Module):
-    pass
+    action_dim: int = 2
+    hidden_cfg: FrozenDict = FrozenDict({'hidden_dims': [64, 64], 'hidden_act': 'ReLU'}) 
+    kernel_init: Initializer = default_init
+    last_w_scale: float = -1.0
+
+    def setup(self):
+        self.conv_feature = nn.Sequential([
+            nn.Conv(16, kernel_size=(3, 3), strides=(1, 1), kernel_init=self.kernel_init()),
+            activations[self.hidden_cfg['hidden_act']],
+            lambda x: x.reshape((x.shape[0], -1)) # flatten first dim of 'x' should be 'batch size'
+            
+        ])
+        self.mlp = MLPQNet(
+            self.action_dim, self.hidden_cfg, self.kernel_init, self.last_w_scale
+        )
+    
+    @nn.compact
+    def __call__(self, obs):
+        obs_feat = self.conv_feature(obs)
+        q = self.mlp(obs_feat)
+        return q 
 
 
 ###################################################
