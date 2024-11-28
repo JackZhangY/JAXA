@@ -32,9 +32,8 @@ class SACTrainer(BaseTrainer):
         ) -> None:
         super().__init__(name, log_dir)
 
-        self.dummy_obs = dummy_obs
-        self.dummy_action = dummy_action 
-        self.obs_dim = dummy_obs.shape[-1]# FlattenObservationWrapper in default
+        self.dummy_obs = dummy_obs[None,] # (1, obs_dims)
+        self.dummy_action = dummy_action[None,]  # (1, act_dims)
         self.action_dim = dummy_action.shape[-1]
         self.auto_finetune_temp = auto_finetune_temp
         self.reward_scaling = reward_scaling
@@ -64,7 +63,7 @@ class SACTrainer(BaseTrainer):
     def init_trainer_state(self, rng):
         critic_rng, actor_rng, temp_rng = jax.random.split(rng, 3)
         # init AC model state
-        critic_params = self.double_critic.init(critic_rng, self.dummy_obs, self.dummy_action) # 'in_axes' is None, so no need to infer 'axis_size' by input size  
+        critic_params = self.double_critic.init(critic_rng, jnp.concatenate([self.dummy_obs, self.dummy_action], axis=-1)) # 'in_axes' is None, so no need to infer 'axis_size' by input size  
         actor_params = self.actor.init(actor_rng, self.dummy_obs)
         critic_state = TargetTrainState.create(
             apply_fn=self.double_critic.apply,

@@ -1,0 +1,32 @@
+# @package _global_
+
+trainer:
+    name: 'ALDQN'
+    qf_kwargs: {
+        hidden_cfg: {hidden_dims: [128], hidden_act: 'ReLU',}
+    }
+    critic_opt_kwargs: {
+        opt_name: 'rmsprop',
+        grad_clip: -1., 
+        max_grad_norm: -1.,
+        anneal: null,
+        lr_kwargs: {
+            learning_rate: 0.00025,
+            centered: True,
+            eps: 0.0001,
+            decay: 0.95
+        }
+    }
+    exploration_kwargs: {
+      name: 'linear',
+      params: {epsilon_start: 1.0, epsilon_end: 0.1, epsilon_steps: 1e5, min_exploration_steps: 5e3}
+    }
+    reward_scaling: 1.
+    reward_bias: 0.
+    tau: 1.0
+    discount: 0.99
+    target_update_freq: 1000
+    alpha: 0.9
+
+    exp_prefix: "${trainer.name}\
+    _alpha=${trainer.alpha}"

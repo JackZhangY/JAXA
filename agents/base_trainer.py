@@ -2,8 +2,8 @@ from utils.logger import Logger
 import abc
 from typing import Union, Any, Dict
 import optax, chex
-# import orbax.checkpoint
-# from flax.training import orbax_utils
+import orbax.checkpoint
+from flax.training import orbax_utils
 from omegaconf import OmegaConf
 
 class BaseTrainer(object, metaclass=abc.ABCMeta):
@@ -62,7 +62,7 @@ class BaseTrainer(object, metaclass=abc.ABCMeta):
     def get_action(self):
         pass
     
-    # def save_model(self, model_params_dict, save_dir):
-    #     orbax_ckpt = orbax.checkpoint.PyTreeCheckpointer()
-    #     save_args = orbax_utils.save_args_from_target(model_params_dict)
-    #     orbax_ckpt.save(save_dir, model_params_dict, save_args=save_args)
+    def save_model(self, model_params_dict, save_dir):
+        orbax_ckpt = orbax.checkpoint.PyTreeCheckpointer()
+        save_args = orbax_utils.save_args_from_target(model_params_dict)
+        orbax_ckpt.save(save_dir, model_params_dict, save_args=save_args)

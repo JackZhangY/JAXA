@@ -1,5 +1,4 @@
 import gym
-import d4rl
 from replay_buffers.base_buffer import BaseBuffer
 import jax
 import jax.numpy as jnp
@@ -17,6 +16,8 @@ class D4RLBuffer:
     # add: Callable  
 
 def init(env, obs_normalize, reward_normalize, is_antmaze=False):
+
+    import d4rl
     dataset = d4rl.qlearning_dataset(env)
     buffer_size = dataset['terminals'].shape[0]
     reward_scale = 1.0

@@ -2,31 +2,36 @@ from envs.wrappers import (BraxGymnaxWrapper, FlattenObservationWrapper, LogWrap
 from envs.d4rl_env import NormalizedBoxEnv
 from envs.mp_vec_env import SubprocVecEnv
 import gym
-import d4rl
 import jax
 from typing import Any, Callable, Tuple, Union
 from utils.misc import Transition
 import chex
 from omegaconf import DictConfig
+from gymnax.environments import spaces
 
 
 def make_vec_env(env_args: Any, rng: chex.PRNGKey):
-    env_type = env_args.name.split('-')[-1]
-    if env_type == 'MinAtar':
+    # env_type = env_args.name.split('-')[-1]
+    env_type = env_args.type
+    if env_type == 'gymnax':
         import gymnax
         env, env_params = gymnax.make(env_args.name)
-        env = FlattenObservationWrapper(env)
+        if env_args.obs_flat:
+            env = FlattenObservationWrapper(env)
         env = LogWrapper(env)
         # construct a dummy Transition
         rng_obs, rng_act, rng_step = jax.random.split(rng, 3)
         _obs, _env_state = env.reset(rng_obs, env_params)
-        action_dim = env.action_space().n
-        _action = jax.random.randint(rng_act, (), minval=0, maxval=action_dim)
+        if type(env.action_space()) == spaces.Discrete:
+            action_dim = env.action_space().n
+            _action = jax.random.randint(rng_act, (), minval=0, maxval=action_dim)
+        ## TODO: elif type(env.action_space()) == spaces.Box 
         _, _, _reward, _done, _ = env.step(rng_step, _env_state, _action, env_params)
         _trans = Transition(obs=_obs, action=_action, reward=_reward, done=_done)
+        obs_act_infos = [_trans, action_dim]
         env = VecEnv(env)
     elif env_type == 'Brax':
-        env, env_params = BraxGymnaxWrapper(env_args.name.split('-')[0], env_args.backend), None
+        env, env_params = BraxGymnaxWrapper(env_args.name, env_args.backend), None
         env = LogWrapper(env)
         env = ClipAction(env)
         # construct a dummy Transition
@@ -35,6 +40,7 @@ def make_vec_env(env_args: Any, rng: chex.PRNGKey):
         _action = env.action_space(env_params).sample(rng_act)
         _, _, _reward, _done, _ = env.step(rng_step, _env_state, _action, env_params)
         _trans = Transition(obs=_obs, action=_action, reward=_reward, done=_done)
+        obs_act_infos = [_trans, None]
         env = VecEnv(env)
     # elif env_type == 'Envpool':
     #     # env = envpool.make_gymnasium(env_name, num_envs=env_nums, seed=int(rng[0])), None
@@ -43,7 +49,7 @@ def make_vec_env(env_args: Any, rng: chex.PRNGKey):
         raise NotImplementedError('Not support current env task')
 
 
-    return env, env_params, _trans
+    return env, env_params, obs_act_infos
 
 def make_d4rl_vec_env(
     env_args: DictConfig,
@@ -62,6 +68,7 @@ def make_d4rl_vec_env(
     :return: The wrapped environment
     """
 
+    import d4rl
     def make_env(rank: int) -> Callable[[], gym.Env]:
         def _init() -> gym.Env:
 

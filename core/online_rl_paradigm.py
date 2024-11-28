@@ -58,7 +58,7 @@ class OnlineRLParadigm(BaseParadigm):
         self.min_num_steps_before_training = min_num_steps_before_training
 
         assert self.total_steps == (self.end_epoch - self.start_epoch) * self.num_timesteps_per_epoch, 'total timesteps by all epoch training not consistent with \'total_steps\''
-        assert self.start_epoch >=0 and self.end_epoch > self.end_epoch, 'not satisify the epoch number setting in online RL'
+        assert self.start_epoch >=0 and self.end_epoch > self.start_epoch, 'not satisify the epoch number setting in online RL'
         assert self.num_timesteps_per_epoch >= self.num_expl_steps_per_epoch, \
             'Online training presumes num_trains_per_train_loop >= num_expl_steps_per_train_loop'
 
@@ -66,7 +66,7 @@ class OnlineRLParadigm(BaseParadigm):
         # init expl_env, replay buffer and trainer
         rng_reset, rng_tr = jax.random.split(rng, 2)
         rng_reset = jax.random.split(rng_reset, self.expl_env_nums)
-        obs, expl_env_state = self.expl_env.reset(rng_reset, self.expl_env_params)
+        obs, expl_env_state = self.expl_env.reset(rng_reset, self.expl_env_params) # obs: (expl_env_nums, obs_dim)
         # init replay buffer
         buffer_state = self.buffer.init(self.fake_trans)
         # init trainer
@@ -81,7 +81,7 @@ class OnlineRLParadigm(BaseParadigm):
                 project=self.args.project,
                 tags=[
                     'jaxa baselines',
-                    f'{self.args.env.backend} backend',
+                    # f'{self.args.env.backend} backend',
                     f"jax_{jax.__version__}",
                 ],
                 name=f"{self.args.env.name}_{self.args.trainer.exp_prefix}",
@@ -112,6 +112,7 @@ class OnlineRLParadigm(BaseParadigm):
                         # self.trainer.logger.info(f'Epoch-{epoch_idx}: Eval Returns:{mean_episode_returns}')
                     jax.debug.callback(callback, total_infos, mean_episode_returns, pseudo_seed, epoch_idx)
 
+                jax.debug.print('Seed-{seed}-Epoch-{e_idx}: episode returns: {rets}', seed=pseudo_seed, e_idx=epoch_idx, rets=mean_episode_returns)
                 return runner_state, None
 
             rng_epochs = jax.random.split(rng_epochs, self.end_epoch - self.start_epoch)

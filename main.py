@@ -11,9 +11,8 @@ from envs.wrappers import  NormalizeVecObservation, EvalNormalizeVecObservation
 from envs.make_env import make_vec_env
 import flashbax as fbx
 from utils.misc import omegaconf_to_dict
-# from replay_buffers.buffer_utils import d4rl_to_fbx
-from agents import * 
-from core import *
+import agents
+from core.online_rl_paradigm import OnlineRLParadigm
 
 #####################################################
 #######                                       #######
@@ -36,7 +35,7 @@ def main(args):
 
     #### build Env & Replaybuffer ####
     rng, rng_eval, rng_expl = jax.random.split(rng, 3)
-    eval_env, eval_env_params, fake_trans = make_vec_env(args.env, rng_eval)
+    eval_env, eval_env_params, obs_act_infos = make_vec_env(args.env, rng_eval)
     expl_env, expl_env_params, _ = make_vec_env(args.env, rng_expl)
     if args.env.obs_norm:
         eval_env, expl_env = EvalNormalizeVecObservation(eval_env), NormalizeVecObservation(expl_env)
@@ -56,12 +55,19 @@ def main(args):
     )
 
     ### build Trainer & RL algro ###
-    if args.trainer.name  == 'SAC':
-        trainer = SACTrainer(
+    if args.trainer.name  in ['SAC']:
+        trainer = getattr(agents, args.trainer.name + 'Trainer')(
             log_dir=exp_dir,
-            dummy_obs=fake_trans.obs,
-            dummy_action=fake_trans.action,
+            dummy_obs=obs_act_infos[0].obs,
+            dummy_action=obs_act_infos[0].action,
             **args.trainer,
+        )
+    elif args.trainer.name in ['DQN', 'ALDQN', 'ClipALDQN']:
+        trainer = getattr(agents, args.trainer.name + 'Trainer')(
+            log_dir=exp_dir,
+            dummy_obs=obs_act_infos[0].obs,
+            action_dim=obs_act_infos[1],
+            **args.trainer
         )
     else:
         raise NotImplementedError('Not support current algorithm')
@@ -74,7 +80,7 @@ def main(args):
         evaluation_env=(eval_env, eval_env_params),
         expl_env_nums=args.env.expl_num,
         eval_env_nums=args.env.eval_num,
-        replay_buffer=(buffer, fake_trans),
+        replay_buffer=(buffer, obs_act_infos[0]),
         **args.rlalg,
     )
 

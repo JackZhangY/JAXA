@@ -10,7 +10,7 @@ from copy import deepcopy
 import cloudpickle
 import gym
 from gym import spaces
-import d4rl
+# import d4rl
 
 # Define type aliases here to avoid circular import
 # Used when we want to access one or more VecEnv

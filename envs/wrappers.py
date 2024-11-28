@@ -7,7 +7,7 @@ from functools import partial
 from typing import Optional, Tuple, Union, Any, Dict
 from gymnax.environments import environment, spaces
 from brax import envs
-from brax.envs.wrappers import EpisodeWrapper, AutoResetWrapper
+from brax.envs.wrappers.training import EpisodeWrapper, AutoResetWrapper
 
 
 class GymnaxWrapper(object):
