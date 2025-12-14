@@ -6,7 +6,16 @@ Tile now, this project mainly includes two types (**Online** / **Offline**) RL a
 
 ### Planned Implementations of Online RL
 
-<table style="width: 55%;">
+| Online Algs | Checked | Code File | Reference Paper |
+|:------------|:--------|:----------|:----------------|
+|DQN   |:heavy_check_mark: | [`dqn_trainer.py`](././agents/dqn_trainer.py)            |[Deep Q-Network](https://arxiv.org/abs/1312.5602)|
+|AL    |:heavy_check_mark: | [`aldqn_trainer.py`](././agents/aldqn_trainer.py)        |[Advantage Learning](https://arxiv.org/abs/1512.04860)|
+|NAF   |:heavy_check_mark: | [`naf_trainer.py`](././agents/naf_trainer.py)            |[Normalized Advantage Functions](https://arxiv.org/abs/1603.00748)|
+|clipAL|:heavy_check_mark: | [`clipaldqn_trainer.py`](././agents/clipaldqn_trainer.py)|[Clipped Advantage Learning](https://ojs.aaai.org/index.php/AAAI/article/view/20900)|
+|ORAL  |:x:                | -                                                        |[Occan's Razor-based AL](https://ieeexplore.ieee.org/document/11227018)|
+|SAC   |:heavy_check_mark: | [`sac_trainer.py`](././agents/dqn_trainer.py)            |[Soft Actor-Critic](https://arxiv.org/abs/1801.01290)|
+
+<!-- <table style="width: 55%;">
   <thead>
     <tr>
       <th width="20%">Online Algs</th>
@@ -44,11 +53,17 @@ Tile now, this project mainly includes two types (**Online** / **Offline**) RL a
       <td><a href="https://arxiv.org/abs/1801.01290">Soft Actor-Critic</a></td>
     </tr>
   </tbody>
-</table>
+</table> -->
 
 ### Planned Implementations of Offline RL
 
-<table style="width: 55%;">
+| Offline Algs | Checked | Code File | Reference Paper |
+|:-------------|:--------|:----------|:----------------|
+|IQL   |:heavy_check_mark: | [`iql_trainer.py`](././agents/iql_trainer.py) |[Implicit Q-Learning](https://arxiv.org/abs/2110.06169)|
+|TD3+BC|:x:                | -                                             |[TD3+Behavior Cloning](https://arxiv.org/pdf/2106.06860)|
+|iTRPO |:x:                | -                                             |[implicit TRPO](https://ojs.aaai.org/index.php/AAAI/article/view/29637)|
+
+<!-- <table style="width: 55%;">
   <thead>
     <tr>
       <th width="25%">Offline Algs</th>
@@ -82,6 +97,6 @@ Tile now, this project mainly includes two types (**Online** / **Offline**) RL a
       <td><a href="././agents/sac_trainer.py">sac_trainer.py</a></td>
       <td><a href="https://arxiv.org/abs/1801.01290">Soft Actor-Critic</a></td>
     </tr> -->
-  </tbody>
-</table>
+  <!-- </tbody>
+</table> --> 
 More reinforcement learning algorithms implemented by JAX will be coming soon.
